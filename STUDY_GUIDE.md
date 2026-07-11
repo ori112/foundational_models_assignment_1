@@ -33,14 +33,14 @@ Frequent words stay whole ("the", "price"); rare words split into pieces ("inter
 |---|---|---|
 | Algorithm | **WordPiece** | **Byte-level BPE** (Byte Pair Encoding) |
 | Continuation marker | `##` prefix (`play`, `##ing`) | `Ġ` marks a leading space (`Ġplaying`) |
-| Unknown text | Falls back to `[UNK]` — **information destroyed** | Never `[UNK]` — falls back to raw bytes |
+| Unknown *pieces* | Falls back to `[UNK]` when a character has no vocab entry at all — **information destroyed** | Never `[UNK]` — falls back to raw bytes |
 | Case | Lowercases everything ("uncased") | Preserves case |
 
 ### What our experiments showed
-- **Hebrew** (`"שלום עולם"`, and our own `"הריבית במשק עלתה..."`): BERT's English vocabulary has no Hebrew, so words collapse into `[UNK]` tokens — the model literally cannot distinguish one Hebrew sentence from another. GPT-2 survives because it operates on bytes, but pays **many tokens per word** (each Hebrew character is multiple bytes, initially unmerged).
+- **Hebrew** (`"שלום עולם"`, and our own `"הריבית במשק עלתה..."`): this is the one place our first instinct was wrong, so it's worth stating precisely. bert-base-uncased's vocab has **no Hebrew subwords**, but it does contain individual Hebrew Unicode letters, so it does **not** fall back to `[UNK]` — it degrades to **one token per letter** (e.g. `"שלום עולם"` → 8 single-character tokens for a 2-word sentence). Nothing is lost, but the cost multiplies: an 8-letter word that would be 1-2 tokens in a Hebrew-aware tokenizer becomes 8 tokens here. GPT-2 also avoids `[UNK]` (byte-level fallback) but spends multiple tokens per Hebrew letter too, since each letter is multiple UTF-8 bytes.
 - **Long rare words** ("internationalization", "annualized", "rebalancing") split into several subwords.
 - **Numbers and URLs** ("67,250", "https://www.coindesk.com/...") fragment badly — tokenizers have no concept of "a number" or "a URL", just frequent character sequences.
-- **Emoji** (🚀) is not in BERT's vocab → `[UNK]`; GPT-2 encodes it as bytes.
+- **Emoji** (🚀) is the example that actually *does* hit `[UNK]` in BERT — there's no vocab entry and no fallback to individual characters for it, so identity is genuinely lost. GPT-2 still encodes it via raw bytes.
 
 ### Why tokenization = money (exam favorite)
 1. **API pricing is per token**, not per word. The same meaning in Hebrew can cost several times more tokens than in English → higher bill.
@@ -129,10 +129,10 @@ Why RAG matters: LLMs have a knowledge cutoff, hallucinate, and don't know your 
 A: A word vocabulary would be huge and still fail on new/rare words; characters make sequences too long. Subwords are a fixed, small vocabulary that can compose any text — frequent words stay whole, rare words split.
 
 **Q: Which text produced the most tokens?**
-A: The Hebrew text under GPT-2 (byte fallback: many tokens per word) and the URL are the extreme cases; per character, Hebrew and emoji are the most expensive. In BERT the Hebrew didn't get many tokens — it got destroyed into `[UNK]` instead, which is worse.
+A: The Hebrew sentences were the most expensive in both tokenizers — BERT gave one token per Hebrew *letter* (8 tokens for a 2-word Hebrew greeting), and GPT-2 gave roughly 1-2 tokens per letter too (multi-byte UTF-8). The long URL was the other extreme case.
 
 **Q: What happened to the Hebrew text?**
-A: `bert-base-uncased` has no Hebrew in its WordPiece vocabulary → `[UNK]` tokens, meaning lost. GPT-2's byte-level BPE never produces UNK → it encodes the raw bytes, but spends many tokens doing so.
+A: It did *not* become `[UNK]` — that was our own first (wrong) guess before checking the actual output. `bert-base-uncased` has no Hebrew *subwords*, but it does have individual Hebrew Unicode characters in its vocab, so Hebrew words get shredded into one token per letter instead. Nothing is lost, but the token count multiplies. GPT-2's byte-level BPE also avoids `[UNK]` entirely, encoding raw UTF-8 bytes instead — it too just spends many tokens doing so. The only genuine `[UNK]` in our BERT results was the 🚀 emoji, which has no character-level fallback.
 
 **Q: Why does tokenization affect cost?**
 A: Pricing, context limits and compute are all *per token*. Attention cost grows quadratically with token count. A language poorly covered by the tokenizer costs several times more per sentence.
