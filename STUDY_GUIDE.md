@@ -64,10 +64,26 @@ We compare vectors with **cosine similarity** — the cosine of the angle betwee
 Dataset: 10 finance documents (inflation, index funds, interest rates, gold, two near-duplicate "tech stocks fell" sentences, budgeting, Bitcoin, one off-topic cat sentence, one Hebrew sentence).
 Query: *"Which investments protect savings when prices rise?"*
 
-- Top results were the inflation/gold/interest-rate documents — **no shared keywords needed**, the match is by meaning. That's the whole advantage over keyword search (a keyword engine would miss "gold is a safe haven when prices are rising" for the query word "inflation-protection").
-- The two near-duplicate sentences score almost identically — paraphrases map to nearly the same vector.
-- The **cat sentence** ranks at the bottom: no semantic overlap.
-- The **Hebrew sentence ranks low even though it is on-topic** (it's about interest rates!). Reason: MiniLM is an **English-only** model — Hebrew text tokenizes into pieces the model never learned meaningful representations for, so its embedding is near-noise. Lesson: an embedding model only "understands" the languages/domains it was trained on. (Fix: use a multilingual model like `paraphrase-multilingual-MiniLM-L12-v2`.)
+Full ranking (cosine similarity, high to low):
+
+| Score | Document |
+|---|---|
+| 0.471 | Rising inflation slowly erodes the value of cash savings. |
+| 0.470 | Index funds are a low-cost way to invest for the long term. |
+| 0.439 | Gold is often seen as a safe haven when prices are rising. |
+| 0.342 | Bitcoin's price is extremely volatile compared to bonds. |
+| 0.322 | The central bank raised interest rates to fight inflation. |
+| 0.285 | A monthly budget helps you control your spending habits. |
+| 0.154 | Shares of technology companies dropped following weak earnings. |
+| 0.096 | Tech stocks fell sharply after the earnings report. |
+| 0.090 | השקל התחזק מול הדולר בעקבות העלאת הריבית |
+| -0.060 | My cat knocked a cup of coffee off the kitchen table. |
+
+- The **top 3** (inflation, index funds, gold) share the query's meaning with **no shared keywords** — that's the whole advantage over keyword search.
+- Interestingly, the **interest-rate document lands mid-pack (0.322)**, not top-3, even though it literally contains the word "inflation." A good talking point: embeddings capture overall sentence meaning, not just keyword presence — this sentence is about a *policy action*, not directly about *protecting savings*, so it's less central to the query than it looks at first glance.
+- The **two near-duplicate "tech stocks fell" sentences rank right next to each other** (0.154 and 0.096) despite sharing almost no words — good evidence that paraphrases cluster together. They're close, though not identical; embeddings capture meaning as a matter of degree, not an exact match.
+- The **cat sentence is dead last** (-0.060, the only negative score) — genuinely no semantic overlap with the query.
+- The **Hebrew sentence ranks second-to-last (0.090) despite being on-topic** (it's about interest rates!). Reason: MiniLM is an **English-only** model — Hebrew text tokenizes into pieces the model never learned meaningful representations for, so its embedding is close to noise. Lesson: an embedding model only "understands" the languages/domains it was trained on. (Fix: use a multilingual model like `paraphrase-multilingual-MiniLM-L12-v2`.)
 
 ### Similarity ≠ truth
 Cosine similarity measures **relatedness, not correctness**. "Gold always protects against inflation" and "Gold never protects against inflation" are nearly identical vectors. Retrieval returns *relevant* text; whether it's *true* is a separate problem.
